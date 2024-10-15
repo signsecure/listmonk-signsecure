@@ -204,9 +204,6 @@ func handleCreateCampaign(c echo.Context) error {
 		o.Type = models.CampaignTypeRegular
 	}
 
-	if o.ContentType == "" {
-		o.ContentType = models.CampaignContentTypeRichtext
-	}
 	if o.Messenger == "" {
 		o.Messenger = "email"
 	}
@@ -218,7 +215,7 @@ func handleCreateCampaign(c echo.Context) error {
 		o = c
 	}
 
-	if o.ArchiveTemplateID == 0 {
+	if o.ArchiveTemplateID.Valid && o.ArchiveTemplateID.Int64 != 0 {
 		o.ArchiveTemplateID = o.TemplateID
 	}
 
