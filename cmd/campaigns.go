@@ -113,24 +113,35 @@ func handleGetCampaign(c echo.Context) error {
 // handlePreviewCampaign renders the HTML preview of a campaign body.
 func handlePreviewCampaign(c echo.Context) error {
 	var (
-		app      = c.Get("app").(*App)
-		id, _    = strconv.Atoi(c.Param("id"))
-		tplID, _ = strconv.Atoi(c.FormValue("template_id"))
+		app   = c.Get("app").(*App)
+		id, _ = strconv.Atoi(c.Param("id"))
+		camp  models.Campaign
+		err   error
 	)
 
 	if id < 1 {
 		return echo.NewHTTPError(http.StatusBadRequest, app.i18n.T("globals.messages.invalidID"))
 	}
 
-	camp, err := app.core.GetCampaignForPreview(id, tplID)
-	if err != nil {
-		return err
-	}
-
 	// There's a body in the request to preview instead of the body in the DB.
 	if c.Request().Method == http.MethodPost {
+		tplID, _ := strconv.Atoi(c.FormValue("template_id"))
+		var t *int
+		if tplID > 0 {
+			t = &tplID
+		}
+		camp, err = app.core.GetCampaignForPreviewWithTemplate(id, t)
+		if err != nil {
+			return err
+		}
+
 		camp.ContentType = c.FormValue("content_type")
 		camp.Body = c.FormValue("body")
+	} else {
+		camp, err = app.core.GetCampaignForPreview(id)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Use a dummy campaign ID to prevent views and clicks from {{ TrackView }}
@@ -434,7 +445,11 @@ func handleTestCampaign(c echo.Context) error {
 	}
 
 	// The campaign.
-	camp, err := app.core.GetCampaignForPreview(campID, tplID)
+	var tid *int
+	if tplID > 0 {
+		tid = &tplID
+	}
+	camp, err := app.core.GetCampaignForPreviewWithTemplate(campID, tid)
 	if err != nil {
 		return err
 	}

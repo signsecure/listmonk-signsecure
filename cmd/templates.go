@@ -63,15 +63,16 @@ func handlePreviewTemplate(c echo.Context) error {
 	var (
 		app   = c.Get("app").(*App)
 		id, _ = strconv.Atoi(c.Param("id"))
+		tpl   models.Template
 	)
 
-	tpl := models.Template{
-		Type: c.FormValue("template_type"),
-		Body: c.FormValue("body"),
-	}
-
 	// Body is posted.
-	if tpl.Body != "" {
+	if c.Request().Method == http.MethodPost {
+		tpl = models.Template{
+			Type: c.FormValue("template_type"),
+			Body: c.FormValue("body"),
+		}
+
 		if tpl.Type == "" {
 			tpl.Type = models.TemplateTypeCampaign
 		}
@@ -96,7 +97,7 @@ func handlePreviewTemplate(c echo.Context) error {
 
 	// Compile the campaign template.
 	var out []byte
-	if tpl.Type == models.TemplateTypeCampaign {
+	if tpl.Type == models.TemplateTypeCampaign || tpl.Type == models.TemplateTypeCampaignVisual {
 		camp := models.Campaign{
 			UUID:         dummyUUID,
 			Name:         app.i18n.T("templates.dummyName"),

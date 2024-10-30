@@ -90,7 +90,7 @@ const (
 
 	// Templates.
 	TemplateTypeCampaign       = "campaign"
-	TemplateTypeCampaignVisual = "visual"
+	TemplateTypeCampaignVisual = "campaign_visual"
 	TemplateTypeTx             = "tx"
 )
 
@@ -628,6 +628,11 @@ func (c *Campaign) CompileTemplate(f template.FuncMap) error {
 
 	// Compile the base template.
 	body := c.TemplateBody
+
+	if body == "" {
+		body = `{{ template "content" . }}`
+	}
+
 	for _, r := range regTplFuncs {
 		body = r.regExp.ReplaceAllString(body, r.replace)
 	}
