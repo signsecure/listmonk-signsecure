@@ -125,18 +125,25 @@ func handlePreviewCampaign(c echo.Context) error {
 
 	// There's a body in the request to preview instead of the body in the DB.
 	if c.Request().Method == http.MethodPost {
-		tplID, _ := strconv.Atoi(c.FormValue("template_id"))
-		var t *int
-		if tplID > 0 {
-			t = &tplID
+		var (
+			tplID, _    = strconv.Atoi(c.FormValue("template_id"))
+			contentType = c.FormValue("content_type")
+			body        = c.FormValue("body")
+			tp          *int
+		)
+
+		// For visual content type don't use the tempalte for preview, use only body.
+		if tplID > 0 && contentType != models.CampaignContentTypeVisual {
+			tp = &tplID
 		}
-		camp, err = app.core.GetCampaignForPreviewWithTemplate(id, t)
+
+		camp, err = app.core.GetCampaignForPreviewWithTemplate(id, tp)
 		if err != nil {
 			return err
 		}
 
-		camp.ContentType = c.FormValue("content_type")
-		camp.Body = c.FormValue("body")
+		camp.ContentType = contentType
+		camp.Body = body
 	} else {
 		camp, err = app.core.GetCampaignForPreview(id)
 		if err != nil {
@@ -248,7 +255,6 @@ func handleUpdateCampaign(c echo.Context) error {
 
 	if id < 1 {
 		return echo.NewHTTPError(http.StatusBadRequest, app.i18n.T("globals.messages.invalidID"))
-
 	}
 
 	cm, err := app.core.GetCampaign(id, "", "")
