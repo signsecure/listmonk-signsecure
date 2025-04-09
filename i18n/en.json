@@ -268,6 +268,7 @@
     "import.subscribeWarning": "Overwriting will re-subscribe unusbscribed e-mails. Continue?",
     "import.title": "Import subscribers",
     "import.upload": "Upload",
+    "import.uniqueEmailPerList": "Each email can only be in one list at a time.",
     "lists.confirmDelete": "Are you sure? This does not delete subscribers.",
     "lists.confirmSub": "Confirm subscription(s) to {name}",
     "lists.invalidName": "Invalid name",

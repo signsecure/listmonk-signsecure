@@ -63,7 +63,8 @@ CREATE TABLE subscriber_lists (
     created_at         TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at         TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
 
-    PRIMARY KEY(subscriber_id, list_id)
+    PRIMARY KEY(subscriber_id, list_id),
+    UNIQUE(subscriber_id)
 );
 DROP INDEX IF EXISTS idx_sub_lists_sub_id; CREATE INDEX idx_sub_lists_sub_id ON subscriber_lists(subscriber_id);
 DROP INDEX IF EXISTS idx_sub_lists_list_id; CREATE INDEX idx_sub_lists_list_id ON subscriber_lists(list_id);

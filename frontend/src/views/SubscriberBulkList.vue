@@ -23,7 +23,11 @@
         </b-field>
 
         <list-selector label="Target lists" placeholder="Lists to apply to" v-model="form.lists" :selected="form.lists"
-          :all="lists.results" />
+          :all="lists.results" :multiple="false" />
+
+        <p class="has-text-warning-dark" v-if="form.action === 'add'">
+          <b-icon icon="alert" /> {{ $t('import.uniqueEmailPerList') }}
+        </p>
 
         <b-field :message="$t('subscribers.preconfirmHelp')">
           <b-checkbox v-model="form.preconfirm" data-cy="preconfirm" :native-value="true" :disabled="!hasOptinList">

@@ -33,6 +33,7 @@ export default {
     message: { type: String, default: '' },
     required: Boolean,
     disabled: Boolean,
+    multiple: { type: Boolean, default: true },
     classes: {
       type: Array,
       default: () => [],
@@ -59,7 +60,14 @@ export default {
       if (!l) {
         return;
       }
-      this.selectedItems.push(l);
+
+      if (!this.multiple) {
+        // Replace the current selection with the new one
+        this.selectedItems = [l];
+      } else {
+        this.selectedItems.push(l);
+      }
+
       this.query = '';
 
       // Propagate the items to the parent's v-model binding.

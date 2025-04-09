@@ -193,8 +193,17 @@ func (a *App) CreateSubscriber(c echo.Context) error {
 	// Filter lists against the current user's permitted lists.
 	listIDs := user.FilterListsByPerm(auth.PermTypeManage, req.Lists)
 
+	// With the unique subscriber constraint, we can only insert a subscriber to one list
+	// Take only the first list if there are multiple
+	var finalListIDs []int
+	if len(listIDs) > 0 {
+		finalListIDs = []int{listIDs[0]}
+	} else {
+		finalListIDs = []int{}
+	}
+
 	// Insert the subscriber into the DB.
-	sub, _, err := a.core.InsertSubscriber(req.Subscriber, listIDs, nil, req.PreconfirmSubs)
+	sub, _, err := a.core.InsertSubscriber(req.Subscriber, finalListIDs, nil, req.PreconfirmSubs)
 	if err != nil {
 		return err
 	}
@@ -231,9 +240,18 @@ func (a *App) UpdateSubscriber(c echo.Context) error {
 	// Filter lists against the current user's permitted lists.
 	listIDs := user.FilterListsByPerm(auth.PermTypeManage, req.Lists)
 
+	// With the unique subscriber constraint, we can only add a subscriber to one list
+	// Take only the first list if there are multiple
+	var finalListIDs []int
+	if len(listIDs) > 0 {
+		finalListIDs = []int{listIDs[0]}
+	} else {
+		finalListIDs = []int{}
+	}
+
 	// Update the subscriber in the DB.
 	id := getID(c)
-	out, _, err := a.core.UpdateSubscriberWithLists(id, req.Subscriber, listIDs, nil, req.PreconfirmSubs, true)
+	out, _, err := a.core.UpdateSubscriberWithLists(id, req.Subscriber, finalListIDs, nil, req.PreconfirmSubs, true)
 	if err != nil {
 		return err
 	}

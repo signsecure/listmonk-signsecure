@@ -670,8 +670,6 @@ func (a *App) processSubForm(c echo.Context) (bool, error) {
 		return false, echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("subscribers.invalidName"))
 	}
 
-	listUUIDs := pq.StringArray(req.FormListUUIDs)
-
 	// Fetch the list types and ensure that they are not private.
 	listTypes, err := a.core.GetListTypes(nil, req.FormListUUIDs)
 	if err != nil {
@@ -684,12 +682,21 @@ func (a *App) processSubForm(c echo.Context) (bool, error) {
 		}
 	}
 
+	// With the unique subscriber constraint, we can only add a subscriber to one list
+	// Take only the first list UUID if there are multiple
+	var finalListUUIDs pq.StringArray
+	if len(req.FormListUUIDs) > 0 {
+		finalListUUIDs = pq.StringArray{req.FormListUUIDs[0]}
+	} else {
+		finalListUUIDs = pq.StringArray{}
+	}
+
 	// Insert the subscriber into the DB.
 	_, hasOptin, err := a.core.InsertSubscriber(models.Subscriber{
 		Name:   req.Name,
 		Email:  req.Email,
 		Status: models.SubscriberStatusEnabled,
-	}, nil, listUUIDs, false)
+	}, nil, finalListUUIDs, false)
 	if err != nil {
 		// Subscriber already exists. Update subscriptions in the DB.
 		if e, ok := err.(*echo.HTTPError); ok && e.Code == http.StatusConflict {
@@ -700,7 +707,8 @@ func (a *App) processSubForm(c echo.Context) (bool, error) {
 			}
 
 			// Update the subscriber's subscriptions in the DB.
-			_, hasOptin, err := a.core.UpdateSubscriberWithLists(sub.ID, sub, nil, listUUIDs, false, false)
+			// Use finalListUUIDs which contains only the first list UUID
+			_, hasOptin, err := a.core.UpdateSubscriberWithLists(sub.ID, sub, nil, finalListUUIDs, false, false)
 			if err != nil {
 				return false, err
 			}

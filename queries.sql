@@ -89,18 +89,37 @@ WITH sub AS (
     VALUES($1, $2, $3, $4, $5)
     RETURNING id, status
 ),
-listIDs AS (
-    SELECT id FROM lists WHERE
-        (CASE WHEN CARDINALITY($6::INT[]) > 0 THEN id=ANY($6)
-              ELSE uuid=ANY($7::UUID[]) END)
+list_array AS (
+    -- Extract the first element from the array if it exists
+    SELECT CASE 
+        WHEN CARDINALITY($6::INT[]) > 0 THEN (SELECT unnest(array[$6[1]]))
+        ELSE NULL
+    END AS list_id
+),
+uuid_array AS (
+    -- Extract the first element from the array if it exists
+    SELECT CASE 
+        WHEN CARDINALITY($7::UUID[]) > 0 THEN (SELECT unnest(array[$7[1]::UUID]))
+        ELSE NULL
+    END AS list_uuid
+),
+listID AS (
+    SELECT id FROM lists 
+    WHERE id = (SELECT list_id FROM list_array WHERE list_id IS NOT NULL)
+       OR uuid = (SELECT list_uuid FROM uuid_array WHERE list_uuid IS NOT NULL)
+    LIMIT 1
+),
+-- Delete any existing list subscriptions for this subscriber
+cleanup AS (
+    DELETE FROM subscriber_lists WHERE subscriber_id = (SELECT id FROM sub)
 ),
 subs AS (
     INSERT INTO subscriber_lists (subscriber_id, list_id, status)
-    VALUES(
+    SELECT
         (SELECT id FROM sub),
-        UNNEST(ARRAY(SELECT id FROM listIDs)),
+        (SELECT id FROM listID),
         (CASE WHEN $4='blocklisted' THEN 'unsubscribed'::subscription_status ELSE $8::subscription_status END)
-    )
+    WHERE EXISTS (SELECT 1 FROM listID)
     ON CONFLICT (subscriber_id, list_id) DO UPDATE
         SET updated_at=NOW(),
             status=(
@@ -124,10 +143,25 @@ WITH sub AS (
         updated_at=NOW()
     RETURNING uuid, id, status
 ),
+-- Delete any existing list subscriptions for this subscriber
+cleanup AS (
+    DELETE FROM subscriber_lists WHERE subscriber_id = (SELECT id FROM sub)
+),
+list_array AS (
+    -- Extract the first element from the array if it exists
+    SELECT CASE 
+        WHEN CARDINALITY($5::INT[]) > 0 THEN (SELECT unnest(array[$5[1]]))
+        ELSE NULL
+    END AS list_id
+),
 subs AS (
     INSERT INTO subscriber_lists (subscriber_id, list_id, status)
-    SELECT sub.id, listID, CASE WHEN sub.status = 'blocklisted' THEN 'unsubscribed' ELSE $6::subscription_status END
-    FROM sub, UNNEST($5::INT[]) AS listID
+    SELECT 
+        sub.id, 
+        (SELECT list_id FROM list_array), 
+        CASE WHEN sub.status = 'blocklisted' THEN 'unsubscribed' ELSE $6::subscription_status END
+    FROM sub
+    WHERE EXISTS (SELECT 1 FROM list_array WHERE list_id IS NOT NULL)
     ON CONFLICT (subscriber_id, list_id) DO UPDATE
     SET updated_at = NOW(),
         status = CASE WHEN $7 THEN EXCLUDED.status ELSE subscriber_lists.status END
@@ -169,20 +203,36 @@ WITH s AS (
         updated_at=NOW()
     WHERE id = $1 RETURNING id
 ),
-listIDs AS (
-    SELECT id FROM lists WHERE
-        (CASE WHEN CARDINALITY($6::INT[]) > 0 THEN id=ANY($6)
-              ELSE uuid=ANY($7::UUID[]) END)
+list_array AS (
+    -- Extract the first element from the array if it exists
+    SELECT CASE 
+        WHEN CARDINALITY($6::INT[]) > 0 THEN (SELECT unnest(array[$6[1]]))
+        ELSE NULL
+    END AS list_id
 ),
+uuid_array AS (
+    -- Extract the first element from the array if it exists
+    SELECT CASE 
+        WHEN CARDINALITY($7::UUID[]) > 0 THEN (SELECT unnest(array[$7[1]::UUID]))
+        ELSE NULL
+    END AS list_uuid
+),
+listID AS (
+    SELECT id FROM lists 
+    WHERE id = (SELECT list_id FROM list_array WHERE list_id IS NOT NULL)
+       OR uuid = (SELECT list_uuid FROM uuid_array WHERE list_uuid IS NOT NULL)
+    LIMIT 1
+),
+-- Always delete existing subscriptions because we now enforce a unique constraint on subscriber_id
 d AS (
-    DELETE FROM subscriber_lists WHERE $9 = TRUE AND subscriber_id = $1 AND list_id != ALL(SELECT id FROM listIDs)
+    DELETE FROM subscriber_lists WHERE subscriber_id = $1
 )
 INSERT INTO subscriber_lists (subscriber_id, list_id, status)
-    VALUES(
+    SELECT
         (SELECT id FROM s),
-        UNNEST(ARRAY(SELECT id FROM listIDs)),
+        (SELECT id FROM listID),
         (CASE WHEN $4='blocklisted' THEN 'unsubscribed'::subscription_status ELSE $8::subscription_status END)
-    )
+    WHERE EXISTS (SELECT 1 FROM listID)
     ON CONFLICT (subscriber_id, list_id) DO UPDATE
     SET status = (
         CASE
@@ -214,9 +264,33 @@ UPDATE subscriber_lists SET status='unsubscribed', updated_at=NOW()
     WHERE subscriber_id = ANY($1::INT[]);
 
 -- name: add-subscribers-to-lists
+WITH sub_array AS (
+    -- Extract the first element from the array if it exists
+    SELECT CASE 
+        WHEN CARDINALITY($1::INT[]) > 0 THEN (SELECT unnest(array[$1[1]]))
+        ELSE NULL
+    END AS sub_id
+),
+list_array AS (
+    -- Extract the first element from the array if it exists
+    SELECT CASE 
+        WHEN CARDINALITY($2::INT[]) > 0 THEN (SELECT unnest(array[$2[1]]))
+        ELSE NULL
+    END AS list_id
+),
+cleanup AS (
+    DELETE FROM subscriber_lists WHERE subscriber_id = (SELECT sub_id FROM sub_array)
+)
 INSERT INTO subscriber_lists (subscriber_id, list_id, status)
-    (SELECT a, b, (CASE WHEN $3 != '' THEN $3::subscription_status ELSE 'unconfirmed' END) FROM UNNEST($1::INT[]) a, UNNEST($2::INT[]) b)
-    ON CONFLICT (subscriber_id, list_id) DO UPDATE SET status=(CASE WHEN $3 != '' THEN $3::subscription_status ELSE subscriber_lists.status END);
+    SELECT 
+        (SELECT sub_id FROM sub_array),
+        (SELECT list_id FROM list_array),
+        (CASE WHEN $3 != '' THEN $3::subscription_status ELSE 'unconfirmed' END)
+    WHERE 
+        EXISTS (SELECT 1 FROM sub_array WHERE sub_id IS NOT NULL) AND
+        EXISTS (SELECT 1 FROM list_array WHERE list_id IS NOT NULL)
+    ON CONFLICT (subscriber_id, list_id) DO UPDATE 
+    SET status=(CASE WHEN $3 != '' THEN $3::subscription_status ELSE subscriber_lists.status END);
 
 -- name: delete-subscriptions
 DELETE FROM subscriber_lists
@@ -403,9 +477,26 @@ UPDATE subscriber_lists SET status='unsubscribed', updated_at=NOW()
 
 -- name: add-subscribers-to-lists-by-query
 -- raw: true
-WITH subs AS (%s)
+WITH subs AS (%s),
+single_sub AS (
+    SELECT id FROM subs LIMIT 1
+),
+cleanup AS (
+    DELETE FROM subscriber_lists WHERE subscriber_id = (SELECT id FROM single_sub)
+),
+list_array AS (
+    -- Extract the first element from the array if it exists
+    SELECT CASE 
+        WHEN CARDINALITY($4::INT[]) > 0 THEN (SELECT unnest(array[$4[1]]))
+        ELSE NULL
+    END AS list_id
+)
 INSERT INTO subscriber_lists (subscriber_id, list_id, status)
-    (SELECT a, b, (CASE WHEN $5 != '' THEN $5::subscription_status ELSE 'unconfirmed' END) FROM UNNEST(ARRAY(SELECT id FROM subs)) a, UNNEST($4::INT[]) b)
+    SELECT 
+        (SELECT id FROM single_sub), 
+        (SELECT list_id FROM list_array),
+        (CASE WHEN $5 != '' THEN $5::subscription_status ELSE 'unconfirmed' END)
+    WHERE EXISTS (SELECT 1 FROM list_array WHERE list_id IS NOT NULL)
     ON CONFLICT (subscriber_id, list_id) DO NOTHING;
 
 -- name: delete-subscriptions-by-query

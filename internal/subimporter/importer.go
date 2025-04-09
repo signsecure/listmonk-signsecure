@@ -439,6 +439,37 @@ func (s *Session) ExtractZIP(srcPath string, maxCSVs int) (string, []string, err
 	return dir, files, nil
 }
 
+// checkIfSubscriberExists checks if a subscriber with the given email already exists in the database.
+// Returns true if the subscriber exists, false otherwise.
+func (im *Importer) checkIfSubscriberExists(email string) (bool, error) {
+	var exists bool
+	query := `SELECT EXISTS(SELECT 1 FROM subscribers WHERE email=$1)`
+	err := im.db.QueryRow(query, email).Scan(&exists)
+	return exists, err
+}
+
+// checkIfSubscriberExistsInOtherLists checks if a subscriber with the given email
+// already exists in lists other than the ones specified in listIDs.
+// Returns true if the subscriber exists in other lists, false otherwise.
+func (im *Importer) checkIfSubscriberExistsInOtherLists(email string, listIDs []int) (bool, error) {
+	var exists bool
+	query := `
+		SELECT EXISTS(
+			SELECT 1 FROM subscribers 
+			JOIN subscriber_lists ON subscribers.id = subscriber_lists.subscriber_id 
+			WHERE subscribers.email = $1 
+			AND (
+				CASE 
+					WHEN CARDINALITY($2::INT[]) > 0 THEN subscriber_lists.list_id != ALL($2::INT[])
+					ELSE TRUE
+				END
+			)
+		)
+	`
+	err := im.db.QueryRow(query, email, pq.Array(listIDs)).Scan(&exists)
+	return exists, err
+}
+
 // LoadCSV loads a CSV file and validates and imports the subscriber entries in it.
 func (s *Session) LoadCSV(srcPath string, delim rune) error {
 	if s.im.isDone() {
@@ -497,8 +528,9 @@ func (s *Session) LoadCSV(srcPath string, delim rune) error {
 	}
 
 	var (
-		lnHdr = len(hdrKeys)
-		i     = 0
+		lnHdr   = len(hdrKeys)
+		i       = 0
+		skipped = 0
 	)
 	for {
 		i++
@@ -552,6 +584,16 @@ func (s *Session) LoadCSV(srcPath string, delim rune) error {
 			continue
 		}
 
+		// Check if subscriber already exists in other lists
+		exists, err := s.im.checkIfSubscriberExistsInOtherLists(sub.Email, s.opt.ListIDs)
+		if err != nil {
+			s.log.Printf("error checking if subscriber exists in other lists: %v", err)
+		} else if exists {
+			s.log.Printf("skipping line %d: %s: subscriber already exists in other lists", i, sub.Email)
+			skipped++
+			continue
+		}
+
 		// JSON attributes.
 		if len(row["attributes"]) > 0 {
 			var (
@@ -567,6 +609,10 @@ func (s *Session) LoadCSV(srcPath string, delim rune) error {
 
 		// Send the subscriber to the queue.
 		s.subQueue <- sub
+	}
+
+	if skipped > 0 {
+		s.log.Printf("skipped %d subscribers that already exist in other lists", skipped)
 	}
 
 	close(s.subQueue)

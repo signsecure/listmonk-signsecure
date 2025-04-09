@@ -59,7 +59,10 @@
 
           <list-selector v-if="form.mode === 'subscribe'" :label="$t('globals.terms.lists')"
             :placeholder="$t('import.listSubHelp')" :message="$t('import.listSubHelp')" v-model="form.lists"
-            :selected="form.lists" :all="lists.results" />
+            :selected="form.lists" :all="lists.results" :multiple="false" />
+          <p class="has-text-warning-dark" v-if="form.mode === 'subscribe'">
+            <b-icon icon="alert" /> {{ $t('import.uniqueEmailPerList') }}
+          </p>
           <hr />
 
           <b-field :label="$t('import.csvFile')" label-position="on-border">

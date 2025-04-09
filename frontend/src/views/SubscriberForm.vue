@@ -49,7 +49,11 @@
         <b-tabs type="is-boxed" :animated="false">
           <b-tab-item :label="$t('globals.terms.lists')" label-position="on-border">
             <list-selector :label="$t('subscribers.lists')" :placeholder="$t('subscribers.listsPlaceholder')"
-              :message="$t('subscribers.listsHelp')" v-model="form.lists" :selected="form.lists" :all="lists.results" />
+              :message="$t('subscribers.listsHelp')" v-model="form.lists" :selected="form.lists" :all="lists.results"
+              :multiple="false" />
+            <p class="has-text-warning-dark">
+              <b-icon icon="alert" /> {{ $t('import.uniqueEmailPerList') }}
+            </p>
             <div class="columns">
               <div class="column is-7">
                 <b-field :message="$t('subscribers.preconfirmHelp')">
